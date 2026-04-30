@@ -172,17 +172,14 @@ PROMPT;
             $status = $response->status();
             $body   = $response->json();
 
-            // Surface friendly messages for common Gemini errors
-            if ($status === 429) {
-                return response()->json([
-                    'error' => 'The AI assistant is busy right now (rate limit reached). Please wait a moment and try again.',
-                ], 429);
-            }
+            // Surface the real Gemini error so it's easy to diagnose
+            $geminiMessage = data_get($body, 'error.message')
+                ?? data_get($body, 'error.status')
+                ?? $response->body();
 
-            $geminiMessage = data_get($body, 'error.message', $response->body());
             return response()->json([
                 'error' => "Gemini error ({$status}): {$geminiMessage}",
-            ], 502);
+            ], ($status >= 400 && $status < 600) ? $status : 502);
         }
 
         $text = data_get($response->json(), 'candidates.0.content.parts.0.text', '');
