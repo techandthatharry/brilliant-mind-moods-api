@@ -172,7 +172,7 @@ PROMPT;
         $response = Http::withHeaders(['Content-Type' => 'application/json'])
             ->timeout(30)
             ->post(
-                "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={$apiKey}",
+                "https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash-lite:generateContent?key={$apiKey}",
                 $payload
             );
 
