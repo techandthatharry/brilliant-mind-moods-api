@@ -101,7 +101,9 @@ class TodoistController extends Controller
 
     public function completeTask(Request $request, string $taskId): JsonResponse
     {
-        $r = $this->http($request)->post(self::BASE . "/tasks/{$taskId}/close");
+        // asForm() sends Content-Type: application/x-www-form-urlencoded with no body.
+        // Sending the default application/json with an empty body causes a 400.
+        $r = $this->http($request)->asForm()->post(self::BASE . "/tasks/{$taskId}/close");
 
         if ($r->failed()) {
             $msg = $r->json('error.message') ?? $r->json('error') ?? $r->body();
@@ -115,7 +117,7 @@ class TodoistController extends Controller
 
     public function reopenTask(Request $request, string $taskId): JsonResponse
     {
-        $r = $this->http($request)->post(self::BASE . "/tasks/{$taskId}/reopen");
+        $r = $this->http($request)->asForm()->post(self::BASE . "/tasks/{$taskId}/reopen");
 
         if ($r->failed()) {
             $msg = $r->json('error.message') ?? $r->json('error') ?? $r->body();
