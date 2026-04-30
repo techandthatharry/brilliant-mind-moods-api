@@ -31,7 +31,8 @@ const server = http.createServer((clientReq, clientRes) => {
   });
 });
 
-server.listen(PROXY_PORT, '127.0.0.1', () => {
-  console.log(`Dev proxy running on http://127.0.0.1:${PROXY_PORT}`);
+server.listen(PROXY_PORT, '0.0.0.0', () => {
+  console.log(`Dev proxy running on http://0.0.0.0:${PROXY_PORT} (all interfaces)`);
   console.log(`Forwarding to http://${SITE_HOST} via Herd`);
+  console.log(`Reachable from devices on same WiFi at http://192.168.50.178:${PROXY_PORT}`);
 });
