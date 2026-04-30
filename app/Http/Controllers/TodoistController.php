@@ -8,31 +8,13 @@ use Illuminate\Support\Facades\Http;
 
 class TodoistController extends Controller
 {
-    private const BASE      = 'https://api.todoist.com/api/v1';
-    private const SYNC_BASE = 'https://api.todoist.com/sync/v9';
+    private const BASE = 'https://api.todoist.com/api/v1';
 
-    // ── Helper: authenticated REST client ─────────────────────────────────────
+    // ── Helper: authenticated HTTP client ─────────────────────────────────────
 
     private function http(Request $request)
     {
         return Http::withToken($request->user()->todoist_api_token)->timeout(15);
-    }
-
-    // ── Helper: Todoist Sync API command ──────────────────────────────────────
-    // The Sync API is more reliable for task state changes across all API key types.
-
-    private function syncCommand(Request $request, string $type, array $args)
-    {
-        return Http::withToken($request->user()->todoist_api_token)
-            ->timeout(15)
-            ->asForm()
-            ->post(self::SYNC_BASE . '/sync', [
-                'commands' => json_encode([[
-                    'type' => $type,
-                    'uuid' => (string) \Illuminate\Support\Str::uuid(),
-                    'args' => $args,
-                ]]),
-            ]);
     }
 
     // ── Connection status ─────────────────────────────────────────────────────
@@ -116,16 +98,14 @@ class TodoistController extends Controller
     }
 
     // ── Complete a task ───────────────────────────────────────────────────────
-    // Uses the Todoist Sync API v9 (item_close command) — more reliable than
-    // the REST close endpoint which varies across API key types.
 
     public function completeTask(Request $request, string $taskId): JsonResponse
     {
-        $r = $this->syncCommand($request, 'item_close', ['id' => $taskId]);
+        $r = $this->http($request)->post(self::BASE . "/tasks/{$taskId}/close");
 
         if ($r->failed()) {
-            $msg = $r->json('error') ?? $r->body();
-            return response()->json(['error' => "Could not complete task: {$msg}"], 502);
+            $msg = $r->json('error.message') ?? $r->json('error') ?? $r->body();
+            return response()->json(['error' => "Todoist ({$r->status()}): {$msg}"], 502);
         }
 
         return response()->json(['success' => true]);
@@ -135,11 +115,11 @@ class TodoistController extends Controller
 
     public function reopenTask(Request $request, string $taskId): JsonResponse
     {
-        $r = $this->syncCommand($request, 'item_uncomplete', ['id' => $taskId]);
+        $r = $this->http($request)->post(self::BASE . "/tasks/{$taskId}/reopen");
 
         if ($r->failed()) {
-            $msg = $r->json('error') ?? $r->body();
-            return response()->json(['error' => "Could not reopen task: {$msg}"], 502);
+            $msg = $r->json('error.message') ?? $r->json('error') ?? $r->body();
+            return response()->json(['error' => "Todoist ({$r->status()}): {$msg}"], 502);
         }
 
         return response()->json(['success' => true]);
