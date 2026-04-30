@@ -137,25 +137,33 @@ Only include the <plan_changes> block when there are actual changes to make.
 Keep the conversational part friendly, motivating, and concise.
 PROMPT;
 
-        // Build Gemini contents array (conversation history + new message)
-        $contents = [];
+        // Build Gemini contents array.
+        // The v1 stable API does not support system_instruction, so we inject
+        // the system context into the very first user message instead.
+        $contents       = [];
+        $contextPrefix  = "[SYSTEM CONTEXT]\n{$systemPrompt}\n[/SYSTEM CONTEXT]\n\n";
+        $contextInjected = false;
 
         foreach (($request->history ?? []) as $turn) {
-            $contents[] = [
-                'role'  => $turn['role'] === 'user' ? 'user' : 'model',
-                'parts' => [['text' => $turn['text']]],
-            ];
+            $role = $turn['role'] === 'user' ? 'user' : 'model';
+            $text = $turn['text'] ?? '';
+
+            if (! $contextInjected && $role === 'user') {
+                $text = $contextPrefix . $text;
+                $contextInjected = true;
+            }
+
+            $contents[] = ['role' => $role, 'parts' => [['text' => $text]]];
         }
 
-        $contents[] = [
-            'role'  => 'user',
-            'parts' => [['text' => $request->message]],
-        ];
+        // New message — inject context here if this is the very first turn
+        $newMessage = $contextInjected ? $request->message : $contextPrefix . $request->message;
+
+        $contents[] = ['role' => 'user', 'parts' => [['text' => $newMessage]]];
 
         $payload = [
-            'system_instruction' => ['parts' => [['text' => $systemPrompt]]],
-            'contents'           => $contents,
-            'generationConfig'   => [
+            'contents'        => $contents,
+            'generationConfig' => [
                 'temperature'     => 0.7,
                 'maxOutputTokens' => 1024,
             ],
