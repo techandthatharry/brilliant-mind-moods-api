@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\MedicationController;
 use App\Http\Controllers\MoodEntryController;
+use App\Http\Controllers\StravaController;
 use App\Http\Controllers\SupportContactController;
 use App\Http\Controllers\TodoistController;
 use App\Http\Controllers\TrainingController;
@@ -68,7 +69,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/withings/status',   [WithingsController::class, 'status']);
     Route::post('/withings/sync',    [WithingsController::class, 'sync']);
     Route::get('/body-metrics',      [WithingsController::class, 'index']);
+
+    // Strava
+    Route::get('/strava/auth-url',      [StravaController::class, 'authUrl']);
+    Route::get('/strava/status',        [StravaController::class, 'status']);
+    Route::post('/strava/sync',         [StravaController::class, 'sync']);
+    Route::get('/strava/activities',    [StravaController::class, 'activities']);
+    Route::delete('/strava/disconnect', [StravaController::class, 'disconnect']);
 });
 
-// Withings OAuth callback — public, called by browser redirect (no Sanctum auth)
+// OAuth callbacks — public, called by browser redirect (no Sanctum auth)
 Route::get('/withings/callback', [WithingsController::class, 'callback']);
+Route::get('/strava/callback',   [StravaController::class,  'callback']);

@@ -5,6 +5,7 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\StravaActivity;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -24,6 +25,11 @@ class User extends Authenticatable
         'withings_refresh_token',
         'withings_token_expires_at',
         'todoist_api_token',
+        'strava_access_token',
+        'strava_refresh_token',
+        'strava_token_expires_at',
+        'strava_athlete_id',
+        'strava_last_synced_at',
     ];
 
     protected $hidden = [
@@ -52,5 +58,10 @@ class User extends Authenticatable
     public function supportContacts(): HasMany
     {
         return $this->hasMany(SupportContact::class);
+    }
+
+    public function stravaActivities(): HasMany
+    {
+        return $this->hasMany(StravaActivity::class);
     }
 }
