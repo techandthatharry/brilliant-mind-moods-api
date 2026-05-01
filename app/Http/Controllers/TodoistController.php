@@ -127,6 +127,51 @@ class TodoistController extends Controller
         return response()->json(['success' => true]);
     }
 
+    // ── Update a task ─────────────────────────────────────────────────────────
+
+    public function updateTask(Request $request, string $taskId): JsonResponse
+    {
+        $request->validate([
+            'content'    => 'required|string|max:500',
+            'due_date'   => 'nullable|string',
+            'priority'   => 'nullable|integer|between:1,4',
+            'project_id' => 'nullable|string',
+        ]);
+
+        $data = ['content' => $request->content];
+
+        // Always send due_date so the user can clear it (null removes it in Todoist)
+        $data['due_date'] = $request->due_date;
+
+        if ($request->filled('priority')) {
+            $data['priority'] = (int) $request->priority;
+        }
+        if ($request->filled('project_id')) {
+            $data['project_id'] = $request->project_id;
+        }
+
+        $r = $this->http($request)->post(self::BASE . "/tasks/{$taskId}", $data);
+
+        if ($r->failed()) {
+            $msg = $r->json('error.message') ?? $r->json('error') ?? $r->body();
+            return response()->json(['error' => "Todoist ({$r->status()}): {$msg}"], 502);
+        }
+
+        $task = $r->json();
+
+        // Enrich with project name
+        $projects = $this->http($request)->get(self::BASE . '/projects');
+        if ($projects->ok()) {
+            $projectList = $projects->json('results') ?? $projects->json();
+            $project = collect($projectList)->firstWhere('id', $task['project_id']);
+            $task['project_name'] = $project['name'] ?? 'Inbox';
+        } else {
+            $task['project_name'] = 'Inbox';
+        }
+
+        return response()->json($task);
+    }
+
     // ── Create a task ─────────────────────────────────────────────────────────
 
     public function createTask(Request $request): JsonResponse

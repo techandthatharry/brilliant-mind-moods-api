@@ -60,6 +60,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/todoist/tasks/date',          [TodoistController::class, 'getTasksForDate']);
     Route::post('/todoist/tasks/{taskId}/complete', [TodoistController::class, 'completeTask']);
     Route::post('/todoist/tasks/{taskId}/reopen',   [TodoistController::class, 'reopenTask']);
+    Route::patch('/todoist/tasks/{taskId}',          [TodoistController::class, 'updateTask']);
     Route::post('/todoist/tasks',              [TodoistController::class, 'createTask']);
 
     // Withings / body metrics
