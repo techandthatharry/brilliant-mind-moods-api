@@ -74,8 +74,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/strava/auth-url',      [StravaController::class, 'authUrl']);
     Route::get('/strava/status',        [StravaController::class, 'status']);
     Route::post('/strava/sync',         [StravaController::class, 'sync']);
-    Route::get('/strava/activities',    [StravaController::class, 'activities']);
-    Route::delete('/strava/disconnect', [StravaController::class, 'disconnect']);
+    Route::get('/strava/activities',                      [StravaController::class, 'activities']);
+    Route::get('/strava/activities/{activity}/splits',    [StravaController::class, 'splits']);
+    Route::delete('/strava/disconnect',                   [StravaController::class, 'disconnect']);
 });
 
 // OAuth callbacks — public, called by browser redirect (no Sanctum auth)

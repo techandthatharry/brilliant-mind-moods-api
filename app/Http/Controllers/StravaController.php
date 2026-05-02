@@ -158,6 +158,46 @@ class StravaController extends Controller
         return response()->json($activities);
     }
 
+    // ── Splits ────────────────────────────────────────────────────────────────
+
+    /**
+     * Fetch imperial splits for a single activity direct from the Strava API.
+     * Results are NOT stored locally — fetched on demand when the user expands a card.
+     */
+    public function splits(Request $request, StravaActivity $activity): JsonResponse
+    {
+        if ($activity->user_id !== $request->user()->id) {
+            return response()->json(['error' => 'Not found'], 404);
+        }
+
+        $accessToken = $this->validToken($request->user());
+        if (! $accessToken) {
+            return response()->json(['error' => 'Strava not connected'], 422);
+        }
+
+        $resp = Http::withToken($accessToken)
+            ->timeout(30)
+            ->get(self::API_URL . '/activities/' . $activity->strava_id);
+
+        if ($resp->failed()) {
+            return response()->json(['error' => 'Could not fetch activity details'], 500);
+        }
+
+        $data   = $resp->json();
+        $splits = $data['splits_imperial'] ?? [];
+
+        return response()->json(
+            collect($splits)->map(fn ($s) => [
+                'split'                => $s['split']                ?? null,
+                'distance'             => $s['distance']             ?? 0,      // metres
+                'moving_time'          => $s['moving_time']          ?? 0,      // seconds
+                'average_speed'        => $s['average_speed']        ?? null,   // m/s
+                'average_heartrate'    => $s['average_heartrate']    ?? null,
+                'elevation_difference' => $s['elevation_difference'] ?? null,   // metres, +/-
+            ])
+        );
+    }
+
     // ── Disconnect ────────────────────────────────────────────────────────────
 
     public function disconnect(Request $request): JsonResponse
