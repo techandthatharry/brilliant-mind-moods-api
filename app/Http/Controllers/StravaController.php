@@ -183,17 +183,44 @@ class StravaController extends Controller
             return response()->json(['error' => 'Could not fetch activity details'], 500);
         }
 
-        $data   = $resp->json();
-        $splits = $data['splits_imperial'] ?? [];
+        $data = $resp->json();
+
+        // 1. Prefer imperial (per-mile) splits for runs
+        // 2. Fall back to metric (per-km) splits — Flutter does the unit conversion
+        // 3. Fall back to recorded laps (rides, manually lapped runs)
+        $splits = !empty($data['splits_imperial'])
+            ? $data['splits_imperial']
+            : (!empty($data['splits_metric'])
+                ? $data['splits_metric']
+                : []);
+
+        if (empty($splits)) {
+            $lapsResp = Http::withToken($accessToken)
+                ->timeout(30)
+                ->get(self::API_URL . '/activities/' . $activity->strava_id . '/laps');
+
+            if ($lapsResp->ok()) {
+                $lapsRaw = $lapsResp->json() ?? [];
+                // Map laps to the same shape as splits
+                $splits = collect($lapsRaw)->map(fn ($l) => [
+                    'split'                => $l['lap_index']             ?? null,
+                    'distance'             => $l['distance']              ?? 0,
+                    'moving_time'          => $l['moving_time']           ?? 0,
+                    'average_speed'        => $l['average_speed']         ?? null,
+                    'average_heartrate'    => $l['average_heartrate']     ?? null,
+                    'elevation_difference' => $l['total_elevation_gain']  ?? null,
+                ])->all();
+            }
+        }
 
         return response()->json(
             collect($splits)->map(fn ($s) => [
                 'split'                => $s['split']                ?? null,
-                'distance'             => $s['distance']             ?? 0,      // metres
-                'moving_time'          => $s['moving_time']          ?? 0,      // seconds
-                'average_speed'        => $s['average_speed']        ?? null,   // m/s
+                'distance'             => $s['distance']             ?? 0,
+                'moving_time'          => $s['moving_time']          ?? 0,
+                'average_speed'        => $s['average_speed']        ?? null,
                 'average_heartrate'    => $s['average_heartrate']    ?? null,
-                'elevation_difference' => $s['elevation_difference'] ?? null,   // metres, +/-
+                'elevation_difference' => $s['elevation_difference'] ?? null,
             ])
         );
     }
