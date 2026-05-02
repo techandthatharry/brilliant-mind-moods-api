@@ -5,39 +5,54 @@ on:
     - cron: '0 2 * * *'   # 2:00 AM UTC every night
   workflow_dispatch:        # allow manual trigger from the Actions tab
 
+# Explicit write permission so the workflow can push the backups branch
+permissions:
+  contents: write
+
 jobs:
   backup:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Checkout with full history so we can switch/create branches ──────
+      # ── 1. Checkout with full history ────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      # ── 2. Switch to (or create) the backups branch ──────────────────────────
+      # ── 2. Configure git identity ────────────────────────────────────────────
+      - name: Configure git
+        run: |
+          git config user.name  "Backup Bot"
+          git config user.email "noreply@github.com"
+
+      # ── 3. Switch to (or create) the backups branch ──────────────────────────
       - name: Ensure backups branch exists
         run: |
           if git ls-remote --heads origin backups | grep -q backups; then
+            git fetch origin backups
             git checkout backups
           else
             git checkout --orphan backups
-            git rm -rf .
+            git rm -rf . 2>/dev/null || true
             echo "# Database Backups" > README.md
+            echo "" >> README.md
             echo "Nightly backups of the Brilliant Mind Moods MySQL database." >> README.md
-            echo "Kept for 30 days. Restore with: \`gunzip -c backup-YYYY-MM-DD.sql.gz | mysql -h HOST -u USER -p DBNAME\`" >> README.md
+            echo "Kept for 30 days." >> README.md
+            echo "" >> README.md
+            echo "**Restore:** \`gunzip -c backup-YYYY-MM-DD.sql.gz | mysql -h HOST -P PORT -u USER -p DBNAME\`" >> README.md
             git add README.md
             git commit -m "Initialise backups branch"
             git push origin backups
           fi
 
-      # ── 3. Dump the database ─────────────────────────────────────────────────
+      # ── 4. Dump the database ─────────────────────────────────────────────────
       - name: Create database dump
         env:
           MYSQL_PWD: ${{ secrets.RAILWAY_DB_PASS }}
         run: |
+          DATE=$(date +%Y-%m-%d)
           mysqldump \
             -h "${{ secrets.RAILWAY_DB_HOST }}" \
             -P "${{ secrets.RAILWAY_DB_PORT }}" \
@@ -47,27 +62,25 @@ jobs:
             --triggers \
             --set-gtid-purged=OFF \
             "${{ secrets.RAILWAY_DB_NAME }}" \
-          | gzip > "backup-$(date +%Y-%m-%d).sql.gz"
+          | gzip > "backup-${DATE}.sql.gz"
+          echo "Backup created: backup-${DATE}.sql.gz ($(du -h backup-${DATE}.sql.gz | cut -f1))"
 
-          echo "Backup size: $(du -h backup-$(date +%Y-%m-%d).sql.gz | cut -f1)"
-
-      # ── 4. Prune — keep only the last 30 backups ────────────────────────────
+      # ── 5. Prune — keep only the last 30 backups ────────────────────────────
       - name: Remove backups older than 30 days
         run: |
           COUNT=$(ls backup-*.sql.gz 2>/dev/null | wc -l)
+          echo "Current backup count: $COUNT"
           if [ "$COUNT" -gt 30 ]; then
             ls -t backup-*.sql.gz | tail -n +31 | xargs rm -f
-            echo "Pruned old backups, keeping 30 most recent."
+            echo "Pruned to 30 most recent backups."
           fi
 
-      # ── 5. Commit and push ───────────────────────────────────────────────────
+      # ── 6. Commit and push ───────────────────────────────────────────────────
       - name: Commit and push backup
         run: |
-          git config user.name  "Backup Bot"
-          git config user.email "noreply@github.com"
           git add -A
           if git diff --staged --quiet; then
-            echo "No changes to commit."
+            echo "Nothing to commit."
           else
             git commit -m "Backup $(date +%Y-%m-%d)"
             git push origin backups
