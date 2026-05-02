@@ -201,9 +201,10 @@ class StravaController extends Controller
                     'moving_time'          => $l['moving_time']          ?? 0,
                     'average_speed'        => $l['average_speed']        ?? null,
                     'average_heartrate'    => $l['average_heartrate']    ?? null,
-                    // Laps expose total_elevation_gain (always positive).
-                    // elevation_difference is a splits-only field.
-                    'elevation_difference' => $l['total_elevation_gain'] ?? null,
+                    // Prefer elevation_difference (net, can be negative) over
+                    // total_elevation_gain (positive only) — both may appear in
+                    // the laps response depending on activity type.
+                    'elevation_difference' => $l['elevation_difference'] ?? $l['total_elevation_gain'] ?? null,
                 ])
             );
         }
