@@ -194,18 +194,53 @@ class StravaController extends Controller
         if ($lapsResp->ok() && !empty($lapsResp->json())) {
             $lapsRaw = $lapsResp->json();
 
+            // Check whether laps include a signed elevation_difference field.
+            // If not (common — laps only expose total_elevation_gain which is
+            // always positive), calculate it from the altitude stream so we
+            // can show climbs vs descents correctly.
+            $firstLap        = $lapsRaw[0] ?? [];
+            $hasElevDiff     = array_key_exists('elevation_difference', $firstLap);
+            $altitudeByIndex = [];
+
+            if (! $hasElevDiff) {
+                $streamResp = Http::withToken($accessToken)
+                    ->timeout(30)
+                    ->get(self::API_URL . '/activities/' . $activity->strava_id . '/streams', [
+                        'keys'         => 'altitude',
+                        'key_by_type'  => 'true',
+                    ]);
+
+                if ($streamResp->ok()) {
+                    $altitudeByIndex = $streamResp->json()['altitude']['data'] ?? [];
+                }
+            }
+
             return response()->json(
-                collect($lapsRaw)->map(fn ($l) => [
-                    'split'                => $l['lap_index']            ?? null,
-                    'distance'             => $l['distance']             ?? 0,
-                    'moving_time'          => $l['moving_time']          ?? 0,
-                    'average_speed'        => $l['average_speed']        ?? null,
-                    'average_heartrate'    => $l['average_heartrate']    ?? null,
-                    // Prefer elevation_difference (net, can be negative) over
-                    // total_elevation_gain (positive only) — both may appear in
-                    // the laps response depending on activity type.
-                    'elevation_difference' => $l['elevation_difference'] ?? $l['total_elevation_gain'] ?? null,
-                ])
+                collect($lapsRaw)->map(function ($l) use ($hasElevDiff, $altitudeByIndex) {
+                    // Signed elevation: use API field if present, else derive
+                    // from altitude stream start→end index difference.
+                    if ($hasElevDiff) {
+                        $elevDiff = $l['elevation_difference'] ?? null;
+                    } elseif (! empty($altitudeByIndex)) {
+                        $startIdx = $l['start_index'] ?? null;
+                        $endIdx   = $l['end_index']   ?? null;
+                        $elevDiff = ($startIdx !== null && $endIdx !== null
+                            && isset($altitudeByIndex[$startIdx], $altitudeByIndex[$endIdx]))
+                            ? ($altitudeByIndex[$endIdx] - $altitudeByIndex[$startIdx])
+                            : ($l['total_elevation_gain'] ?? null);
+                    } else {
+                        $elevDiff = $l['total_elevation_gain'] ?? null;
+                    }
+
+                    return [
+                        'split'                => $l['lap_index']        ?? null,
+                        'distance'             => $l['distance']         ?? 0,
+                        'moving_time'          => $l['moving_time']      ?? 0,
+                        'average_speed'        => $l['average_speed']    ?? null,
+                        'average_heartrate'    => $l['average_heartrate'] ?? null,
+                        'elevation_difference' => $elevDiff,
+                    ];
+                })
             );
         }
 
