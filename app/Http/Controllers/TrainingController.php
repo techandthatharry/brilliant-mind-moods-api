@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\StravaActivity;
 use App\Models\TrainingSession;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -112,12 +113,83 @@ class TrainingController extends Controller
         $planJson = json_encode($sessions, JSON_PRETTY_PRINT);
         $today    = today()->format('l, j F Y');
 
+        // ── Strava context: last 30 days of actual activities ─────────────────
+        $stravaActivities = StravaActivity::where('user_id', $request->user()->id)
+            ->where('start_date', '>=', now()->subDays(30))
+            ->orderByDesc('start_date')
+            ->get();
+
+        $stravaLines = $stravaActivities->map(function ($a) {
+            $date     = $a->start_date->format('Y-m-d (D)');
+            $type     = $a->sport_type;
+            $name     = $a->name;
+            $indoor   = $a->is_indoor ? ' [indoor]' : '';
+            $parts    = [];
+
+            // Distance
+            if ($a->distance_metres > 0) {
+                $miles = round($a->distance_metres / 1609.344, 2);
+                $parts[] = "{$miles} mi";
+            }
+
+            // Duration
+            $sec = $a->moving_time_seconds;
+            if ($sec > 0) {
+                $h = intdiv($sec, 3600);
+                $m = intdiv($sec % 3600, 60);
+                $s = $sec % 60;
+                $parts[] = $h > 0
+                    ? "{$h}h {$m}m"
+                    : sprintf('%d:%02d', $m, $s);
+            }
+
+            // Pace / speed
+            if ($a->average_speed_mps > 0) {
+                $isRun = stripos($type, 'run') !== false;
+                if ($isRun) {
+                    $secPerMile = 1609.344 / $a->average_speed_mps;
+                    $pm = intdiv((int) $secPerMile, 60);
+                    $ps = (int) $secPerMile % 60;
+                    $parts[] = sprintf("avg pace %d:%02d /mi", $pm, $ps);
+                } else {
+                    $mph = round($a->average_speed_mps * 2.23694, 1);
+                    $parts[] = "avg speed {$mph} mph";
+                }
+            }
+
+            // Heart rate
+            if ($a->average_heartrate) {
+                $parts[] = 'avg HR ' . round($a->average_heartrate) . 'bpm';
+            }
+
+            // Suffer score / relative effort
+            if ($a->suffer_score) {
+                $parts[] = "effort score {$a->suffer_score}";
+            }
+
+            $detail = implode(', ', $parts);
+            return "- {$date}: {$type}{$indoor} \"{$name}\"" . ($detail ? " — {$detail}" : '');
+        })->join("\n");
+
+        $stravaContext = $stravaActivities->isEmpty()
+            ? 'No Strava activities recorded in the past 30 days.'
+            : $stravaLines;
+
+        // ─────────────────────────────────────────────────────────────────────
+
         $systemPrompt = <<<PROMPT
 You are Harry's personal training coach assistant, embedded in his Brilliant Mind Moods health app.
 Today is {$today}.
 
 Harry's current training plan (next 30 days + recent 7 days) is:
 {$planJson}
+
+Harry's actual recent workouts from Strava (last 30 days, newest first):
+{$stravaContext}
+
+Use the Strava data to understand what Harry has actually been doing vs. what was planned.
+Consider his recent pace, effort, HR trends, and any missed or extra sessions when giving advice
+or adjusting the plan.
 
 You can answer questions about the plan, suggest modifications, and update sessions.
 
